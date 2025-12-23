@@ -2,9 +2,9 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Put your FULL obfuscated Lua code inside these backticks
-const SECURE_SCRIPT = `
-    print("local UIS = game:GetService("UserInputService")
+// Your FULL Roblox Script goes inside these backticks
+const MY_ROBLOX_SCRIPT = `-- SONIX PRECISION FULL UI
+local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local SocialService = game:GetService("SocialService")
@@ -276,18 +276,21 @@ task.spawn(function()
         end
         task.wait(3) -- Poll every 3 seconds to stay under Render rate limits
     end
-end))
-    -- YOUR FULL SCRIPT GOES HERE
+end)
+print("Global Chat System Loaded via Render")
 `;
 
+// This is the route the Roblox Loader looks for
 app.get('/fetch', (req, res) => {
-    // Optional: Add a custom header check to prevent browser access
-    if (req.headers['user-agent'] !== 'Roblox/Linux') {
-        return res.status(403).send('Access Denied');
-    }
-    res.send(SECURE_SCRIPT);
+    res.set('Content-Type', 'text/plain'); // Tells Roblox this is raw code
+    res.send(MY_ROBLOX_SCRIPT);
 });
 
-app.get('/', (req, res) => res.send("Loader Active"));
+// Main page (to check if it's online)
+app.get('/', (req, res) => {
+    res.send("Sonix Server is Online. Use /fetch to get the script.");
+});
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
