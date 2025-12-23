@@ -277,10 +277,11 @@ task.spawn(function()
 end)
 `;
 
-// This sends the script as a single clean block
+// ENCODE TO BASE64 SO DELTA CAN'T BREAK IT
 app.get('/', (req, res) => {
+    const encoded = Buffer.from(MY_ROBLOX_SCRIPT).toString('base64');
     res.set('Content-Type', 'text/plain');
-    res.send(MY_ROBLOX_SCRIPT.trim());
+    res.send(encoded);
 });
 
-app.listen(PORT, () => console.log('Sonix Server Live!'));
+app.listen(PORT, () => console.log('Sonix Server: Base64 Mode Active'));
