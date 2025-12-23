@@ -7,6 +7,8 @@ if __name__ == '__main__':
 
 app = Flask(__name__)
 
+setclipboard(game:GetService("RbxAnalyticsService"):GetClientId())
+
 # [[ 1. CONFIGURATION & WHITELIST ]]
 WHITELISTED_HWIDS = [
     "PASTE_YOUR_DELTA_ID_HERE", # Put your actual ID here!
