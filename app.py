@@ -8,91 +8,96 @@ app = Flask(__name__)
 DB_NAME = "sonix_global.db"
 MAX_MESSAGES = 200
 
-# --- DATABASE LOGIC ---
 def get_db_connection():
-    # Timeout 20s and WAL mode allow multiple users to chat without "Database Locked" errors
-    conn = sqlite3.connect(DB_NAME, timeout=20)
-    conn.row_factory = sqlite3.Row
+    conn = sqlite3.connect(DB_NAME, timeout=15)
+    # WAL mode allows reading while writing (crucial for high traffic)
     conn.execute('PRAGMA journal_mode=WAL')
+    conn.row_factory = sqlite3.Row
     return conn
 
+# --- DATABASE INITIALIZATION ---
 def init_db():
-    conn = get_db_connection()
-    conn.execute('''CREATE TABLE IF NOT EXISTS global_messages 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  player_name TEXT, 
-                  user_id INTEGER, 
-                  message TEXT, 
-                  timestamp REAL)''')
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS global_chat (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                uid INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                timestamp REAL NOT NULL
+            )
+        ''')
+        conn.commit()
+
+init_db()
 
 # --- ROUTES ---
+
 @app.route('/')
-def home():
+def health_check():
     return "Sonix Precision Server: ONLINE", 200
 
 @app.route('/send', methods=['POST'])
-def send_global():
-    try:
-        data = request.json
-        p_name = data.get('PlayerName', 'Unknown')
-        u_id = data.get('UserId', 0)
-        msg = data.get('Message', '')
+def send_message():
+    data = request.json
+    # Matching the Lua Keys exactly
+    name = data.get('PlayerName')
+    uid = data.get('UserId')
+    msg = data.get('Message')
 
-        if not msg:
-            return jsonify({"status": "empty"}), 400
+    if not all([name, uid, msg]):
+        return jsonify({"status": "error", "reason": "Missing fields"}), 400
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
+    with get_db_connection() as conn:
         # Insert new message
-        cursor.execute("INSERT INTO global_messages (player_name, user_id, message, timestamp) VALUES (?, ?, ?, ?)",
-                  (p_name, u_id, msg, time.time()))
-        
-        # Auto-delete old messages (Keep only the last 200)
-        cursor.execute('''DELETE FROM global_messages WHERE id NOT IN 
-                          (SELECT id FROM global_messages ORDER BY id DESC LIMIT ?)''', (MAX_MESSAGES,))
-        
+        conn.execute(
+            'INSERT INTO global_chat (name, uid, content, timestamp) VALUES (?, ?, ?, ?)',
+            (name, uid, msg, time.time())
+        )
+        # 200 Message Enforcement: Delete everything except the top 200 IDs
+        conn.execute('''
+            DELETE FROM global_chat 
+            WHERE id NOT IN (
+                SELECT id FROM global_chat 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            )
+        ''', (MAX_MESSAGES,))
         conn.commit()
-        conn.close()
-        return jsonify({"status": "success"}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "reason": str(e)}), 500
+
+    return jsonify({"status": "success"}), 200
 
 @app.route('/get_messages', methods=['GET'])
-def get_global():
-    try:
-        after = float(request.args.get('after', 0))
-        conn = get_db_connection()
-        # Fetch newest messages sent by ANY user
-        rows = conn.execute("SELECT player_name, user_id, message, timestamp FROM global_messages WHERE timestamp > ? ORDER BY id ASC", (after,)).fetchall()
-        conn.close()
+def get_messages():
+    after_ts = request.args.get('after', default=0, type=float)
+    
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            'SELECT name, uid, content, timestamp FROM global_chat WHERE timestamp > ? ORDER BY timestamp ASC',
+            (after_ts,)
+        ).fetchall()
+        
+    # Formatting to match the Lua table expectations
+    output = []
+    for r in rows:
+        output.append({
+            "PlayerName": r['name'],
+            "UserId": r['uid'],
+            "Message": r['content'],
+            "Timestamp": r['timestamp']
+        })
+        
+    return jsonify(output)
 
-        results = []
-        for r in rows:
-            results.append({
-                "PlayerName": r['player_name'],
-                "UserId": r['user_id'],
-                "Message": r['message'],
-                "Timestamp": r['timestamp']
-            })
-        return jsonify(results), 200
-    except Exception as e:
-        return jsonify({"status": "error", "reason": str(e)}), 500
-
-# --- RENDER 24/7 TRICK ---
-# We use a simple background timer that does NOT use the requests library to avoid boot crashes
-def stay_awake():
+# --- RENDER STAY-AWAKE HEARTBEAT ---
+def heartbeat():
     while True:
-        # Just print to logs to keep the process active in Render's view
-        time.sleep(60)
-        print("Sonix Heartbeat: Active")
+        # Prints to the Render console to keep the process active
+        print(f"Sonix Heartbeat: {time.ctime()} - Database size: {os.path.getsize(DB_NAME) if os.path.exists(DB_NAME) else 0} bytes")
+        time.sleep(600) # Runs every 10 minutes
 
 if __name__ == '__main__':
-    init_db()
-    # Start the heartbeat thread
-    threading.Thread(target=stay_awake, daemon=True).start()
-    # Use environment port for Render compatibility
+    threading.Thread(target=heartbeat, daemon=True).start()
+    # Use environment port for Render deployment
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
