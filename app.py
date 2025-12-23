@@ -7,11 +7,11 @@ import requests
 app = Flask(__name__)
 DB_NAME = "sonix_global.db"
 SELF_URL = "https://sosixglobal.onrender.com/ping" 
+MAX_MESSAGES = 200  # THE LIMIT
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_NAME, timeout=10) # Timeout prevents "Database is locked" errors
+    conn = sqlite3.connect(DB_NAME, timeout=10)
     conn.row_factory = sqlite3.Row
-    # Enable WAL mode so multiple users can read/write simultaneously
     conn.execute('PRAGMA journal_mode=WAL')
     return conn
 
@@ -26,7 +26,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 24/7 Keep-Alive
+# 24/7 Keep-Alive Trick
 def keep_alive():
     while True:
         try:
@@ -37,7 +37,7 @@ def keep_alive():
 
 @app.route('/ping')
 def ping():
-    return "Online", 200
+    return "Sonix Online", 200
 
 @app.route('/send', methods=['POST'])
 def send_global():
@@ -50,8 +50,16 @@ def send_global():
         return jsonify({"status": "empty"}), 400
 
     conn = get_db_connection()
-    conn.execute("INSERT INTO global_messages (player_name, user_id, message, timestamp) VALUES (?, ?, ?, ?)",
+    cursor = conn.cursor()
+    
+    # 1. Insert the new message
+    cursor.execute("INSERT INTO global_messages (player_name, user_id, message, timestamp) VALUES (?, ?, ?, ?)",
               (p_name, u_id, msg, time.time()))
+    
+    # 2. THE CLEANUP: Delete anything older than the last 200 messages
+    cursor.execute('''DELETE FROM global_messages WHERE id NOT IN 
+                      (SELECT id FROM global_messages ORDER BY id DESC LIMIT ?)''', (MAX_MESSAGES,))
+    
     conn.commit()
     conn.close()
     return jsonify({"status": "success"})
@@ -60,8 +68,8 @@ def send_global():
 def get_global():
     after = float(request.args.get('after', 0))
     conn = get_db_connection()
-    # Fetch all messages from everyone after the last timestamp
-    rows = conn.execute("SELECT player_name, user_id, message, timestamp FROM global_messages WHERE timestamp > ? ORDER BY timestamp ASC", (after,)).fetchall()
+    # Fetch newest messages
+    rows = conn.execute("SELECT player_name, user_id, message, timestamp FROM global_messages WHERE timestamp > ? ORDER BY id ASC", (after,)).fetchall()
     conn.close()
 
     results = []
