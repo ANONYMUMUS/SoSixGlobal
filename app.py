@@ -1,19 +1,7 @@
 from flask import Flask, request, jsonify
 import time
 
-if __name__ == '__main__':
-    # Changed port to 10000 for Render compatibility
-    app.run(host='0.0.0.0', port=10000)
-
 app = Flask(__name__)
-
-setclipboard(game:GetService("RbxAnalyticsService"):GetClientId())
-
-# [[ 1. CONFIGURATION & WHITELIST ]]
-WHITELISTED_HWIDS = [
-    "PASTE_YOUR_DELTA_ID_HERE", # Put your actual ID here!
-    "FRIEND_HWID_HERE"
-]
 
 # [[ 2. YOUR SECRET V3 SCRIPT ]]
 # This is the massive Lua code you sent me.
