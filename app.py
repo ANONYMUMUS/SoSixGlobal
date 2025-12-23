@@ -3,7 +3,7 @@ import time
 
 app = Flask(__name__)
 
-# [[ 2. YOUR SECRET V3 SCRIPT ]]
+# [[ 1. YOUR SECRET V3 SCRIPT ]]
 # This is the massive Lua code you sent me.
 SECRET_V3_SCRIPT = """
 -- [[ SONIX PRECISION: FULL INTEGRATED CLIENT v3 ]]
@@ -247,7 +247,7 @@ MainBtn.MouseButton1Click:Connect(function()
     end
 end)"""
 
-# [[ 3. CHAT STORAGE ]]
+# [[ 2. CHAT STORAGE ]]
 messages = []
 MAX_HISTORY = 100
 
@@ -255,19 +255,13 @@ MAX_HISTORY = 100
 def home():
     return "Sonix Precision Systems: Online", 200
 
-# [[ 4. SCRIPT AUTH ENDPOINT ]]
-# Roblox calls this: SERVER_URL/load_sonix?hwid=...
+# [[ 3. AUTH ENDPOINT ]]
 @app.route('/load_sonix', methods=['GET'])
 def load_sonix():
-    user_hwid = request.args.get('hwid')
-    
-    if user_hwid in WHITELISTED_HWIDS:
-        return SECRET_V3_SCRIPT, 200
-    else:
-        # We send a Roblox warning so the exploiter knows they are caught
-        return "warn('SONIX AUTH: Access Denied. HWID not recognized.')", 403
+    # Set to return script to everyone for Multiplayer
+    return SECRET_V3_SCRIPT, 200
 
-# [[ 5. MESSENGER ENDPOINTS ]]
+# [[ 4. MESSENGER ENDPOINTS ]]
 @app.post('/send')
 def send_message():
     data = request.json
@@ -287,17 +281,17 @@ def send_message():
 @app.get('/get_messages')
 def get_messages():
     after = float(request.args.get('after', 0))
-    requester_id = int(request.args.get('uid', 0))
-    
-    filtered = [
-        m for m in messages 
-        if m['Timestamp'] > after and (
-            m['Type'] == "global" or 
-            m['UserId'] == requester_id or 
-            m['TargetId'] == requester_id
-        )
-    ]
+    filtered = [m for m in messages if m['Timestamp'] > after]
     return jsonify(filtered), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Fixed Port for Render
+    app.run(host='0.0.0.0', port=10000)
+🚀 Final Instructions:
+Paste this into your app.py on GitHub.
+
+Commit the changes.
+
+Go to Render and wait for the Green "Live" light.
+
+Run the Loader in Delta.
