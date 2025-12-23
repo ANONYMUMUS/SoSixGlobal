@@ -8,9 +8,8 @@ if __name__ == '__main__':
 app = Flask(__name__)
 
 # [[ 1. CONFIGURATION & WHITELIST ]]
-# Put your HWID and your friends' HWIDs here
 WHITELISTED_HWIDS = [
-    "YOUR_HWID_HERE",
+    "PASTE_YOUR_DELTA_ID_HERE", # Put your actual ID here!
     "FRIEND_HWID_HERE"
 ]
 
