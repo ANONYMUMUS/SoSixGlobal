@@ -2,8 +2,8 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Your FULL Roblox Script goes inside these backticks
-const MY_ROBLOX_SCRIPT = `-- SONIX PRECISION FULL UI
+// --- THE FULL ROBLOX SCRIPT DATA ---
+const MY_ROBLOX_SCRIPT = `
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
@@ -106,8 +106,8 @@ local function CreateInfoBox(label, value, targetPos, delay)
     task.wait(delay)
     if not InfoLayer.Visible then return end
     local box = Instance.new("TextButton", InfoLayer); box.Size = UDim2.new(0, 85, 0, 28); box.Position = targetPos - UDim2.new(0, 0, 0, 20); box.BackgroundColor3 = Color3.fromRGB(45, 45, 45); box.BackgroundTransparency = 1; box.ZIndex = 10; box.Text = ""; Instance.new("UICorner", box).CornerRadius = UDim.new(1, 0)
-    local txt = Instance.new("TextLabel", box); txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1; txt.RichText = true; txt.Text = "<b>"..label.."</b>\n"..tostring(value); txt.TextColor3 = Color3.new(1, 1, 1); txt.TextSize = 7; txt.ZIndex = 11
-    box.MouseButton1Click:Connect(function() setclipboard(tostring(value)); txt.Text = "<b>COPIED!</b>"; task.wait(0.8); txt.Text = "<b>"..label.."</b>\n"..tostring(value) end)
+    local txt = Instance.new("TextLabel", box); txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1; txt.RichText = true; txt.Text = "<b>"..label.."</b>\\n"..tostring(value); txt.TextColor3 = Color3.new(1, 1, 1); txt.TextSize = 7; txt.ZIndex = 11
+    box.MouseButton1Click:Connect(function() setclipboard(tostring(value)); txt.Text = "<b>COPIED!</b>"; task.wait(0.8); txt.Text = "<b>"..label.."</b>\\n"..tostring(value) end)
     table.insert(ActiveBoxes, box)
     TweenService:Create(box, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = targetPos, BackgroundTransparency = 0.1}):Play()
 end
@@ -260,7 +260,6 @@ task.spawn(function()
 
         if success and response.StatusCode == 200 then
             local messages = HttpService:JSONDecode(response.Body)
-            -- Sort messages by timestamp to ensure chronological order
             table.sort(messages, function(a, b) return a.Timestamp < b.Timestamp end)
 
             for _, m in ipairs(messages) do
@@ -274,21 +273,22 @@ task.spawn(function()
         else
             warn("Sonix Precision: Connection Interrupted. Code: " .. (response and tostring(response.StatusCode) or "Timeout"))
         end
-        task.wait(3) -- Poll every 3 seconds to stay under Render rate limits
+        task.wait(3)
     end
 end)
-print("Global Chat System Loaded via Render")
 `;
 
-// This is the route the Roblox Loader looks for
+// --- ROUTES ---
+
+// Loader hits this to get the script
 app.get('/fetch', (req, res) => {
-    res.set('Content-Type', 'text/plain'); // Tells Roblox this is raw code
+    res.set('Content-Type', 'text/plain');
     res.send(MY_ROBLOX_SCRIPT);
 });
 
-// Main page (to check if it's online)
+// Basic check
 app.get('/', (req, res) => {
-    res.send("Sonix Server is Online. Use /fetch to get the script.");
+    res.send("Sonix Precision Server: ONLINE");
 });
 
 app.listen(PORT, () => {
