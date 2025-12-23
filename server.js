@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- THE FULL ROBLOX SCRIPT DATA ---
+// Your specific Lua script is stored here
 const MY_ROBLOX_SCRIPT = `
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -278,19 +278,12 @@ task.spawn(function()
 end)
 `;
 
-// --- ROUTES ---
-
-// Loader hits this to get the script
-app.get('/fetch', (req, res) => {
+// --- ROOT ROUTE ---
+app.get('/', (req, res) => {
     res.set('Content-Type', 'text/plain');
     res.send(MY_ROBLOX_SCRIPT);
 });
 
-// Basic check
-app.get('/', (req, res) => {
-    res.send("Sonix Precision Server: ONLINE");
-});
-
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Sonix Precision Server running on port ${PORT}`);
 });
