@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
 import time
 
+if __name__ == '__main__':
+    # Changed port to 10000 for Render compatibility
+    app.run(host='0.0.0.0', port=10000)
+
 app = Flask(__name__)
 
 # [[ 1. CONFIGURATION & WHITELIST ]]
