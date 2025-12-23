@@ -2,7 +2,6 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Your specific Lua script is stored here
 const MY_ROBLOX_SCRIPT = `
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -278,12 +277,10 @@ task.spawn(function()
 end)
 `;
 
-// --- ROOT ROUTE ---
+// This sends the script as a single clean block
 app.get('/', (req, res) => {
     res.set('Content-Type', 'text/plain');
-    res.send(MY_ROBLOX_SCRIPT);
+    res.send(MY_ROBLOX_SCRIPT.trim());
 });
 
-app.listen(PORT, () => {
-    console.log(`Sonix Precision Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log('Sonix Server Live!'));
