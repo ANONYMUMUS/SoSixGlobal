@@ -4,8 +4,7 @@ import os
 
 app = Flask(__name__)
 
-# [[ 1. THE SECRET V3 SCRIPT ]]
-# FIXED: Line 200 now correctly references UIListLayout instead of the Frame
+# [[ 1. THE SECRET V3 LUA SCRIPT ]]
 SECRET_V3_SCRIPT = r"""
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -21,6 +20,7 @@ local lastTimestamp = 0
 local canSend = true
 local COOLDOWN_TIME = 3
 local MAX_CHARS = 300
+local unreadCount = 0
 
 -- [[ 1. UI ROOT ]]
 local ScreenGui = Instance.new("ScreenGui", PlayerGui); ScreenGui.Name = "Sonix_Precision_Final"; ScreenGui.ResetOnSpawn = false
@@ -175,40 +175,59 @@ local Backdrop = Instance.new("TextButton", ContextOverlay); Backdrop.Size = UDi
 Backdrop.MouseButton1Click:Connect(function() ContextOverlay.Visible = false; for _,v in pairs(ContextOverlay:GetChildren()) do if v.Name == "CopyBtn" then v:Destroy() end end end)
 
 -- [[ 8. CHAT & INPUT ]]
-local ChatBox = Instance.new("ScrollingFrame", MainContainer); ChatBox.Size = UDim2.new(1, -20, 1, -60); ChatBox.Position = UDim2.new(0, 10, 0, 10); ChatBox.BackgroundTransparency = 1; ChatBox.ScrollBarThickness = 0; ChatBox.AutomaticCanvasSize = Enum.AutomaticSize.Y; 
+local ChatBox = Instance.new("ScrollingFrame", MainContainer); ChatBox.Size = UDim2.new(1, -20, 1, -60); ChatBox.Position = UDim2.new(0, 10, 0, 10); ChatBox.BackgroundTransparency = 1; ChatBox.ScrollBarThickness = 2; ChatBox.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 150); ChatBox.AutomaticCanvasSize = Enum.AutomaticSize.Y; 
 local ChatLayout = Instance.new("UIListLayout", ChatBox); ChatLayout.Padding = UDim.new(0, 6)
 
-local function AddMsg(uid, user, text)
+-- [[ 8.1 NEW MESSAGE NOTIFIER ]]
+local UpdateBtn = Instance.new("TextButton", MainContainer)
+UpdateBtn.Size = UDim2.new(0, 140, 0, 26); UpdateBtn.Position = UDim2.new(0.5, -70, 1, -75)
+UpdateBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 150); UpdateBtn.TextColor3 = Color3.fromRGB(12, 12, 12)
+UpdateBtn.Font = Enum.Font.GothamBold; UpdateBtn.TextSize = 10; UpdateBtn.Visible = false; UpdateBtn.ZIndex = 50
+Instance.new("UICorner", UpdateBtn).CornerRadius = UDim.new(0, 8)
+
+UpdateBtn.MouseButton1Click:Connect(function()
+    unreadCount = 0; UpdateBtn.Visible = false
+    ChatBox.CanvasPosition = Vector2.new(0, 999999)
+end)
+
+local function AddMsg(uid, user, text, isSystem)
     local msgFrame = Instance.new("Frame", ChatBox); msgFrame.Size = UDim2.new(1, 0, 0, 0); msgFrame.BackgroundTransparency = 1; msgFrame.AutomaticSize = "Y"
-    local pfp = Instance.new("ImageButton", msgFrame); pfp.Size = UDim2.new(0, 26, 0, 26); pfp.Position = UDim2.new(0, 0, 0, 2); pfp.Image = Players:GetUserThumbnailAsync(uid, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48); Instance.new("UICorner", pfp).CornerRadius = UDim.new(1, 0); pfp.MouseButton1Click:Connect(function() Inspect(uid, user) end)
     
-    local content = Instance.new("TextLabel", msgFrame); content.Size = UDim2.new(1, -32, 0, 0); content.Position = UDim2.new(0, 32, 0, 11); content.BackgroundTransparency = 1; content.TextColor3 = Color3.new(1,1,1); content.Text = text; content.TextSize = 10; content.TextXAlignment = "Left"; content.TextWrapped = true; content.AutomaticSize = "Y"
-    content.Active = true; content.Selectable = true
+    if isSystem then
+        local sysLabel = Instance.new("TextLabel", msgFrame)
+        sysLabel.Size = UDim2.new(1, 0, 0, 20); sysLabel.BackgroundTransparency = 1; sysLabel.TextColor3 = Color3.fromRGB(0, 255, 150); sysLabel.Font = Enum.Font.GothamItalic; sysLabel.TextSize = 9; sysLabel.Text = "[SYSTEM]: " .. text
+    else
+        local pfp = Instance.new("ImageButton", msgFrame); pfp.Size = UDim2.new(0, 26, 0, 26); pfp.Position = UDim2.new(0, 0, 0, 2); pfp.Image = Players:GetUserThumbnailAsync(uid, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48); Instance.new("UICorner", pfp).CornerRadius = UDim.new(1, 0); pfp.MouseButton1Click:Connect(function() Inspect(uid, user) end)
+        
+        local header = Instance.new("TextLabel", msgFrame); header.Size = UDim2.new(1, -32, 0, 10); header.Position = UDim2.new(0, 32, 0, 0); header.BackgroundTransparency = 1; header.TextColor3 = Color3.fromRGB(160, 160, 160); header.Text = "<b>" .. user:lower() .. "</b>"; header.TextSize = 7; header.RichText = true; header.TextXAlignment = "Left"
+        
+        local content = Instance.new("TextLabel", msgFrame); content.Size = UDim2.new(1, -32, 0, 0); content.Position = UDim2.new(0, 32, 0, 11); content.BackgroundTransparency = 1; content.TextColor3 = Color3.new(1,1,1); content.Text = text; content.TextSize = 10; content.TextXAlignment = "Left"; content.TextWrapped = true; content.AutomaticSize = "Y"
+        content.Active = true; content.Selectable = true
 
-    local header = Instance.new("TextLabel", msgFrame); header.Size = UDim2.new(1, -32, 0, 10); header.Position = UDim2.new(0, 32, 0, 0); header.BackgroundTransparency = 1; header.TextColor3 = Color3.fromRGB(160, 160, 160); header.Text = "<b>" .. user:lower() .. "</b>"; header.TextSize = 7; header.RichText = true; header.TextXAlignment = "Left"
-
-    local holdTime = 0
-    content.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            holdTime = tick()
-            local currentHold = holdTime
-            task.delay(0.6, function()
-                if holdTime == currentHold and (UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UIS:GetMouseButtonsPressed()[1]) then
-                    ContextOverlay.Visible = true
-                    local btnArea = Instance.new("Frame", ContextOverlay); btnArea.Name = "CopyBtn"; btnArea.Size = UDim2.new(0, 60, 0, 25); btnArea.BackgroundTransparency = 1; 
-                    btnArea.Position = UDim2.new(0, content.AbsolutePosition.X + 20, 0, content.AbsolutePosition.Y + 15)
-                    local b = Instance.new("TextButton", btnArea); b.Size = UDim2.new(1, 0, 1, 0); b.BackgroundColor3 = Color3.fromRGB(45, 45, 45); b.Text = "COPY"; b.TextColor3 = Color3.new(1,1,1); b.TextSize = 10; Instance.new("UICorner", b)
-                    b.MouseButton1Click:Connect(function() setclipboard(text); ContextOverlay.Visible = false; btnArea:Destroy() end)
-                end
-            end)
-        end
-    end)
-    content.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then holdTime = 0 end end)
+        local holdTime = 0
+        content.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                holdTime = tick(); local currentHold = holdTime
+                task.delay(0.6, function()
+                    if holdTime == currentHold then
+                        ContextOverlay.Visible = true; local btnArea = Instance.new("Frame", ContextOverlay); btnArea.Name = "CopyBtn"; btnArea.Size = UDim2.new(0, 60, 0, 25); btnArea.BackgroundTransparency = 1; btnArea.Position = UDim2.new(0, content.AbsolutePosition.X + 20, 0, content.AbsolutePosition.Y + 15)
+                        local b = Instance.new("TextButton", btnArea); b.Size = UDim2.new(1, 0, 1, 0); b.BackgroundColor3 = Color3.fromRGB(45, 45, 45); b.Text = "COPY"; b.TextColor3 = Color3.new(1,1,1); b.TextSize = 10; Instance.new("UICorner", b)
+                        b.MouseButton1Click:Connect(function() setclipboard(text); ContextOverlay.Visible = false; btnArea:Destroy() end)
+                    end
+                end)
+            end
+        end)
+        content.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then holdTime = 0 end end)
+    end
     
-    -- FIXED LINE 200: Using ChatLayout.AbsoluteContentSize instead of ChatBox.AbsoluteContentSize
     task.defer(function() 
-        if ChatLayout then
-            ChatBox.CanvasPosition = Vector2.new(0, ChatLayout.AbsoluteContentSize.Y) 
+        local isAtBottom = ChatBox.CanvasPosition.Y + ChatBox.AbsoluteSize.Y >= (ChatLayout.AbsoluteContentSize.Y - 50)
+        if isAtBottom or uid == Player.UserId then
+            ChatBox.CanvasPosition = Vector2.new(0, 999999)
+            unreadCount = 0; UpdateBtn.Visible = false
+        else
+            unreadCount = unreadCount + 1
+            UpdateBtn.Text = "NEW MESSAGES (" .. unreadCount .. ") ↓"; UpdateBtn.Visible = true
         end
     end)
 end
@@ -231,25 +250,12 @@ end)
 local function Send(txt)
     if not canSend or txt == "" then return end
     canSend = false; SendBtn.TextColor3 = Color3.fromRGB(80, 80, 80)
-    
-    local payload = HttpService:JSONEncode({
-        PlayerName = Player.Name,
-        UserId = Player.UserId,
-        Message = txt
-    })
-
+    local payload = HttpService:JSONEncode({PlayerName = Player.Name, UserId = Player.UserId, Message = txt, IsSystem = false})
     task.spawn(function()
-        local success, response = pcall(function()
-            return HttpService:RequestAsync({
-                Url = SERVER_URL .. "/send",
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = payload
-            })
+        pcall(function()
+            HttpService:RequestAsync({Url = SERVER_URL .. "/send", Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = payload})
         end)
-        if not success then warn("Sonix Send Error: " .. tostring(response)) end
     end)
-    
     task.delay(COOLDOWN_TIME, function() canSend = true; SendBtn.TextColor3 = Color3.fromRGB(0, 255, 150) end)
 end
 
@@ -259,39 +265,34 @@ SendBtn.MouseButton1Click:Connect(function()
     end 
 end)
 
--- [[ 10. RECODED RENDER SYNC LOOP ]]
+-- [[ 10. SYNC LOOP & JOIN ]]
 subButtons[3].MouseButton1Click:Connect(function() Inspect(Player.UserId, Player.Name) end)
 
 task.spawn(function()
-    print("Sonix Precision: Sync Loop Started")
+    pcall(function()
+        local j = HttpService:JSONEncode({PlayerName = "System", UserId = 1, Message = Player.Name .. " joined the chat.", IsSystem = true})
+        HttpService:RequestAsync({Url = SERVER_URL .. "/send", Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = j})
+    end)
     while true do
         local success, response = pcall(function()
-            return HttpService:RequestAsync({
-                Url = SERVER_URL .. "/get_messages?after=" .. tostring(lastTimestamp),
-                Method = "GET"
-            })
+            return HttpService:RequestAsync({Url = SERVER_URL .. "/get_messages?after=" .. tostring(lastTimestamp), Method = "GET"})
         end)
-
         if success and response.StatusCode == 200 then
             local messages = HttpService:JSONDecode(response.Body)
             table.sort(messages, function(a, b) return a.Timestamp < b.Timestamp end)
-
             for _, m in ipairs(messages) do
                 if m.Timestamp > lastTimestamp then
-                    AddMsg(m.UserId or 1, m.PlayerName or "Unknown", m.Message or "")
+                    AddMsg(m.UserId or 1, m.PlayerName or "Unknown", m.Message or "", m.IsSystem or false)
                     lastTimestamp = m.Timestamp
                 end
             end
-        elseif success and response.StatusCode == 503 then
-            print("Sonix: Server waking up...")
-        else
-            warn("Sonix Precision: Connection Interrupted. Code: " .. (response and tostring(response.StatusCode) or "Timeout"))
         end
         task.wait(3)
     end
-end)"""
+end)
+"""
 
-# [[ 2. CHAT STORAGE ]]
+# [[ 2. PYTHON SERVER LOGIC ]]
 messages = []
 
 @app.route('/')
@@ -308,15 +309,15 @@ def send_message():
     if not data: return jsonify({"status": "error"}), 400
     
     msg = {
-        "PlayerName": data.get("PlayerName"),
-        "UserId": data.get("UserId"),
-        "Message": data.get("Message"),
+        "PlayerName": data.get("PlayerName", "System"),
+        "UserId": data.get("UserId", 1),
+        "Message": data.get("Message", ""),
+        "IsSystem": data.get("IsSystem", False), # Fix: Added IsSystem handling
         "Timestamp": time.time()
     }
     messages.append(msg)
     
-    # Keep list from growing too large (memory optimization)
-    if len(messages) > 200:
+    if len(messages) > 150:
         messages.pop(0)
         
     return jsonify({"status": "ok"}), 200
@@ -331,6 +332,5 @@ def get_messages():
         return jsonify([]), 200
 
 if __name__ == '__main__':
-    # Render uses dynamic ports; this ensures it binds correctly
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
