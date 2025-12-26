@@ -1,10 +1,11 @@
 from flask import Flask, request, jsonify
 import time
+import os
 
 app = Flask(__name__)
 
 # [[ 1. THE SECRET V3 SCRIPT ]]
-# Added 'r' before quotes to handle special characters and backslashes
+# FIXED: Line 200 now correctly references UIListLayout instead of the Frame
 SECRET_V3_SCRIPT = r"""
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -174,7 +175,8 @@ local Backdrop = Instance.new("TextButton", ContextOverlay); Backdrop.Size = UDi
 Backdrop.MouseButton1Click:Connect(function() ContextOverlay.Visible = false; for _,v in pairs(ContextOverlay:GetChildren()) do if v.Name == "CopyBtn" then v:Destroy() end end end)
 
 -- [[ 8. CHAT & INPUT ]]
-local ChatBox = Instance.new("ScrollingFrame", MainContainer); ChatBox.Size = UDim2.new(1, -20, 1, -60); ChatBox.Position = UDim2.new(0, 10, 0, 10); ChatBox.BackgroundTransparency = 1; ChatBox.ScrollBarThickness = 0; ChatBox.AutomaticCanvasSize = Enum.AutomaticSize.Y; Instance.new("UIListLayout", ChatBox).Padding = UDim.new(0, 6)
+local ChatBox = Instance.new("ScrollingFrame", MainContainer); ChatBox.Size = UDim2.new(1, -20, 1, -60); ChatBox.Position = UDim2.new(0, 10, 0, 10); ChatBox.BackgroundTransparency = 1; ChatBox.ScrollBarThickness = 0; ChatBox.AutomaticCanvasSize = Enum.AutomaticSize.Y; 
+local ChatLayout = Instance.new("UIListLayout", ChatBox); ChatLayout.Padding = UDim.new(0, 6)
 
 local function AddMsg(uid, user, text)
     local msgFrame = Instance.new("Frame", ChatBox); msgFrame.Size = UDim2.new(1, 0, 0, 0); msgFrame.BackgroundTransparency = 1; msgFrame.AutomaticSize = "Y"
@@ -202,9 +204,11 @@ local function AddMsg(uid, user, text)
         end
     end)
     content.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then holdTime = 0 end end)
+    
+    -- FIXED LINE 200: Using ChatLayout.AbsoluteContentSize instead of ChatBox.AbsoluteContentSize
     task.defer(function() 
-        if ChatBox:FindFirstChildOfClass("UIListLayout") then
-            ChatBox.CanvasPosition = Vector2.new(0, ChatBox.AbsoluteContentSize.Y) 
+        if ChatLayout then
+            ChatBox.CanvasPosition = Vector2.new(0, ChatLayout.AbsoluteContentSize.Y) 
         end
     end)
 end
@@ -235,15 +239,15 @@ local function Send(txt)
     })
 
     task.spawn(function()
-        local success, err = pcall(function()
-            return request({
+        local success, response = pcall(function()
+            return HttpService:RequestAsync({
                 Url = SERVER_URL .. "/send",
                 Method = "POST",
                 Headers = {["Content-Type"] = "application/json"},
                 Body = payload
             })
         end)
-        if not success then warn("Sonix Send Error: " .. tostring(err)) end
+        if not success then warn("Sonix Send Error: " .. tostring(response)) end
     end)
     
     task.delay(COOLDOWN_TIME, function() canSend = true; SendBtn.TextColor3 = Color3.fromRGB(0, 255, 150) end)
@@ -262,7 +266,7 @@ task.spawn(function()
     print("Sonix Precision: Sync Loop Started")
     while true do
         local success, response = pcall(function()
-            return request({
+            return HttpService:RequestAsync({
                 Url = SERVER_URL .. "/get_messages?after=" .. tostring(lastTimestamp),
                 Method = "GET"
             })
@@ -292,7 +296,7 @@ messages = []
 
 @app.route('/')
 def home():
-    return "Sonix Server is Online", 200
+    return "Sonix Precision API: ONLINE", 200
 
 @app.route('/load_sonix', methods=['GET'])
 def load_sonix():
@@ -301,6 +305,8 @@ def load_sonix():
 @app.post('/send')
 def send_message():
     data = request.json
+    if not data: return jsonify({"status": "error"}), 400
+    
     msg = {
         "PlayerName": data.get("PlayerName"),
         "UserId": data.get("UserId"),
@@ -308,13 +314,23 @@ def send_message():
         "Timestamp": time.time()
     }
     messages.append(msg)
+    
+    # Keep list from growing too large (memory optimization)
+    if len(messages) > 200:
+        messages.pop(0)
+        
     return jsonify({"status": "ok"}), 200
 
 @app.get('/get_messages')
 def get_messages():
-    after = float(request.args.get('after', 0))
-    filtered = [m for m in messages if m['Timestamp'] > after]
-    return jsonify(filtered), 200
+    try:
+        after = float(request.args.get('after', 0))
+        filtered = [m for m in messages if m['Timestamp'] > after]
+        return jsonify(filtered), 200
+    except:
+        return jsonify([]), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    # Render uses dynamic ports; this ensures it binds correctly
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
