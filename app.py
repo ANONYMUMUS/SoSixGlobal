@@ -7,11 +7,10 @@ app = Flask(__name__)
 DB_NAME = "sonix_global.db"
 MAX_MESSAGES = 200
 
-# --- ADMIN CONFIG ---
-# Add UserIDs here to block them from chatting (e.g., [123456, 987654])
-BLACKLIST = [] 
+# --- CONFIG ---
+MODERATORS = ["shadowss_99"]
 
-# --- DATABASE LOGIC (DO NOT DELETE) ---
+# --- DATABASE LOGIC ---
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME, timeout=15)
     conn.execute('PRAGMA journal_mode=WAL')
@@ -20,34 +19,40 @@ def get_db_connection():
 
 def init_db():
     with get_db_connection() as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS global_chat (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                uid INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                timestamp REAL NOT NULL
-            )
-        ''')
+        # Chat Table
+        conn.execute('''CREATE TABLE IF NOT EXISTS global_chat 
+            (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, uid INTEGER, content TEXT, timestamp REAL)''')
+        # Penalties Table (The Storage)
+        conn.execute('''CREATE TABLE IF NOT EXISTS penalties 
+            (uid INTEGER PRIMARY KEY, name TEXT, type TEXT, end_time REAL)''')
         conn.commit()
 
-# --- ROUTES ---
+# --- HELPER: TRASH CLEANER & RESTRICTION CHECK ---
+def check_penalty(uid):
+    """Checks if a user is restricted. Deletes expired records automatically."""
+    with get_db_connection() as conn:
+        row = conn.execute('SELECT type, end_time FROM penalties WHERE uid = ?', (uid,)).fetchone()
+        if row:
+            # end_time 0 means permanent
+            if row['end_time'] == 0 or time.time() < row['end_time']:
+                return row['type'], row['end_time']
+            else:
+                # Timer expired - Clear the trash automatically
+                conn.execute('DELETE FROM penalties WHERE uid = ?', (uid,))
+                conn.commit()
+    return None, None
 
-@app.route('/')
-def health_check():
-    return "Sonix Precision API: ONLINE", 200
+# --- ROUTES ---
 
 @app.route('/send', methods=['POST'])
 def send_message():
     data = request.json
     name, uid, msg = data.get('PlayerName'), data.get('UserId'), data.get('Message')
     
-    if not all([name, uid, msg]):
-        return jsonify({"status": "error"}), 400
-
-    # BLACKLIST CHECK
-    if uid in BLACKLIST:
-        return jsonify({"status": "banned"}), 403
+    # Check if banned/muted
+    p_type, p_end = check_penalty(uid)
+    if p_type:
+        return jsonify({"status": "restricted", "type": p_type, "expires": p_end}), 403
     
     with get_db_connection() as conn:
         conn.execute('INSERT INTO global_chat (name, uid, content, timestamp) VALUES (?, ?, ?, ?)', 
@@ -56,17 +61,45 @@ def send_message():
         conn.commit()
     return jsonify({"status": "success"}), 200
 
+@app.route('/admin/execute', methods=['POST'])
+def execute_command():
+    data = request.json
+    mod_name = data.get('ModName')
+    target_name = data.get('TargetName')
+    target_uid = data.get('TargetId')
+    action = data.get('Action') # ban, mute, unban, unmute
+    duration = data.get('Duration') # seconds, or 0 for permanent
+
+    if mod_name not in MODERATORS:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+    
+    if mod_name == target_name:
+        return jsonify({"status": "error", "message": "You cannot penalize yourself!"}), 400
+
+    with get_db_connection() as conn:
+        if action in ["ban", "mute"]:
+            end_ts = 0 if duration == 0 else time.time() + duration
+            conn.execute('INSERT OR REPLACE INTO penalties (uid, name, type, end_time) VALUES (?, ?, ?, ?)', 
+                         (target_uid, target_name, action, end_ts))
+        else: # unban/unmute
+            conn.execute('DELETE FROM penalties WHERE uid = ?', (target_uid,))
+        conn.commit()
+    return jsonify({"status": "success"})
+
+@app.route('/admin/list', methods=['GET'])
+def get_blocklist():
+    with get_db_connection() as conn:
+        rows = conn.execute('SELECT * FROM penalties').fetchall()
+    return jsonify([dict(r) for r in rows])
+
 @app.route('/get_messages', methods=['GET'])
 def get_messages():
     after_ts = request.args.get('after', default=0, type=float)
     with get_db_connection() as conn:
-        rows = conn.execute('SELECT name, uid, content, timestamp FROM global_chat WHERE timestamp > ? ORDER BY timestamp ASC', 
-                            (after_ts,)).fetchall()
-    output = [{"PlayerName": r['name'], "UserId": r['uid'], "Message": r['content'], "Timestamp": r['timestamp']} for r in rows]
-    return jsonify(output)
+        rows = conn.execute('SELECT name, uid, content, timestamp FROM global_chat WHERE timestamp > ? ORDER BY timestamp ASC', (after_ts,)).fetchall()
+    return jsonify([{"PlayerName": r['name'], "UserId": r['uid'], "Message": r['content'], "Timestamp": r['timestamp']} for r in rows])
 
-# --- THE EXECUTE ---
 if __name__ == '__main__':
-    init_db() 
+    init_db()
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
